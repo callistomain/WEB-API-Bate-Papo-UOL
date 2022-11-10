@@ -3,7 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import Joi from "joi";
 import dayjs from "dayjs";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
+import { stripHtml } from "string-strip-html";
 dotenv.config();
 
 const port = 5000;
@@ -12,20 +13,24 @@ app.use(express.json());
 app.use(cors());
 
 const client = new MongoClient(process.env.MONGO_URI);
-let db, participants, messages, status;
+await client.connect();
 
-client.connect().then(() => {
-	db = client.db("batePapoTest");
-    participants = db.collection("participants");
-    messages = db.collection("messages");
-    status = db.collection("status");
-});
+const db = client.db("batePapoTest");
+const participants = db.collection("participants");
+const messages = db.collection("messages");
+
+try {
+    await client.connect();
+} catch (err) {
+    console.log('Error: ', err.message);
+}
 
 // Remoção automática de usuários inativos
 setInterval(async () => {
     try {
         const documents = await participants.find().toArray();
-        documents.forEach(e => {
+        for (let i = 0; i < documents.length; i++) {
+            const e = documents[i];
             const timeDiff = Date.now() - e.lastStatus;
             if (timeDiff >= 10000) {
                 const message = {
@@ -35,10 +40,10 @@ setInterval(async () => {
                     type: 'status',
                     time: dayjs().format("HH:mm:ss")
                 };
-                messages.insertOne(message).catch(err => console.log('A Error: ', err));
-                participants.deleteOne(e).catch(err => console.log('B Error: ', err));
+                await messages.insertOne(message);
+                await participants.deleteOne(e);
             }
-        });
+        }
     } catch (err) {
         console.log('Remoção Error: ', err.message);
     }
@@ -72,7 +77,7 @@ app.post("/participants", async (req, res) => {
             return;
         }
     
-        const {name} = data;
+        const name = stripHtml(data.name).result.trim();
         const found = await participants.findOne({name});
         if (found) return res.sendStatus(409);
     
@@ -106,7 +111,7 @@ app.get("/messages", async (req, res) => {
         limit = (+limit > 0) ? +limit : 0;
 
         const documents = await messages
-        .find({$or: [{from}, {"type": "message"}, {"to": from}, {"to": "Todos"}]}, {projection:{_id:0}})
+        .find({$or: [{from}, {"type": "message"}, {"to": from}, {"to": "Todos"}]})
         .skip(messages.count() - limit)
         .toArray();
         res.send(documents);
@@ -141,7 +146,8 @@ app.post("/messages", async (req, res) => {
             if (!found) return res.sendStatus(422);
         }
     
-        const {to, text, type} = data;
+        const {to, type} = data;
+        const text = stripHtml(data.text).result.trim();
         const obj = {from, to, text, type, time: dayjs().format("HH:mm:ss")};
         await messages.insertOne(obj);
         res.sendStatus(201);
@@ -150,6 +156,64 @@ app.post("/messages", async (req, res) => {
     }
 });
 
+// [DELETE] /messages
+app.delete("/messages/:id", async (req, res) => {
+    try {
+        const user = req.header("User");
+        const {id} = req.params;
+
+        const message = await messages.findOne(ObjectId(id));
+
+        if (!message) return res.sendStatus(404);
+        if (message.from !== user) return res.sendStatus(401);
+        await messages.deleteOne(message);
+    } catch (e) {
+        console.log('[DELETE] /messages Error: ', e.message);
+        res.sendStatus(500);
+    }
+});
+
+// [PUT] /messages
+app.put("/messages/:id", async (req, res) => {
+    try {
+        const data = req.body;
+        const schema = Joi.object({
+            to: Joi.string().alphanum().min(1).required(),
+            text: Joi.string().min(1).required(),
+            type: Joi.string().alphanum().min(1).valid("message", "private_message").required()
+        });
+    
+        const {error} = schema.validate(data);
+        if (error) { 
+            const message = error.details.map(e => e.message).join(',');
+            console.log("POST MES Error: " + message); 
+            res.status(422).send(message);
+            return;
+        }
+    
+        const {id} = req.params;
+        const from = req.header("User");
+
+        const message = await messages.findOne({_id: ObjectId(id)});
+        if (!message) return res.sendStatus(404);
+        if (message.from !== from) return res.sendStatus(401);
+
+        if (!from) return res.sendStatus(422);
+        else  {
+            const found = await messages.findOne({from});
+            if (!found) return res.sendStatus(422);
+        }
+    
+        const {to, type} = data;
+        const text = stripHtml(data.text).result.trim();
+        const obj = {from, to, text, type, time: dayjs().format("HH:mm:ss")};
+        await messages.updateOne({_id: ObjectId(id)}, {$set: obj});
+        res.sendStatus(200);
+    } catch (e) {
+        console.log('[PUT] /messages Error: ', e.message);
+        res.sendStatus(500);
+    }
+});
 
 // [POST] /status
 app.post("/status", async (req, res) => {
@@ -167,7 +231,6 @@ app.post("/status", async (req, res) => {
         res.sendStatus(500);
     }
 });
-
 
 app.listen(port, () => {
     console.log("Server running at port " + port);
