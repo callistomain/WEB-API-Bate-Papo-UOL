@@ -166,7 +166,7 @@ app.delete("/messages/:id", async (req, res) => {
         const user = req.header("User");
         const {id} = req.params;
 
-        const message = await messages.findOne(ObjectId(id));
+        const message = await messages.findOne(new ObjectId(id));
 
         if (!message) return res.sendStatus(404);
         if (message.from !== user) return res.sendStatus(401);
