@@ -110,9 +110,8 @@ app.get("/messages", async (req, res) => {
         let {limit} = req.query;
         limit = (+limit > 0) ? +limit : 0;
 
-        const documents = await messages
-        .find({$or: [{from}, {"type": "message"}, {"to": from}, {"to": "Todos"}]})
-        .toArray();
+        const or = {$or: [{from}, {"type": "message"}, {"to": from}, {"to": "Todos"}]};
+        const documents = await messages.find(or).toArray();
 
         const len = documents.length;
         const filtered = [];
