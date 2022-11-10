@@ -7,23 +7,29 @@ import { MongoClient, ObjectId } from "mongodb";
 import { stripHtml } from "string-strip-html";
 dotenv.config();
 
+// Express
 const port = 5000;
 const app = express();
 app.use(express.json());
 app.use(cors());
 
+// MongoDB
 const client = new MongoClient(process.env.MONGO_URI);
 await client.connect();
-
 const db = client.db("batePapoTest");
 const participants = db.collection("participants");
 const messages = db.collection("messages");
 
-try {
-    await client.connect();
-} catch (err) {
-    console.log('Error: ', err.message);
-}
+// Schemas
+const participantSchema = Joi.object({
+    name: Joi.string().alphanum().min(1).required()
+});
+
+const messageSchema = Joi.object({
+    to: Joi.string().alphanum().min(1).required(),
+    text: Joi.string().min(1).required(),
+    type: Joi.string().alphanum().min(1).valid("message", "private_message").required()
+});
 
 // Remoção automática de usuários inativos
 setInterval(async () => {
@@ -65,14 +71,10 @@ app.get("/participants", async (req, res) => {
 app.post("/participants", async (req, res) => {
     try {
         const data = req.body;
-        const schema = Joi.object({
-            name: Joi.string().alphanum().min(1).required()
-        });
-    
-        const {error} = schema.validate(data);
+        const {error} = participantSchema.validate(data, {abortEarly: false});
         if (error) { 
-            const message = error.details.map(e => e.message).join(',');
-            console.log("POST PART Error: " + message); 
+            const message = error.details.map(e => e.message);
+            console.log("[POST] /participants Error: " + message); 
             res.status(422).send({error: message});
             return;
         }
@@ -129,17 +131,11 @@ app.get("/messages", async (req, res) => {
 app.post("/messages", async (req, res) => {
     try {
         const data = req.body;
-        const schema = Joi.object({
-            to: Joi.string().alphanum().min(1).required(),
-            text: Joi.string().min(1).required(),
-            type: Joi.string().alphanum().min(1).valid("message", "private_message").required()
-        });
-    
-        const {error} = schema.validate(data);
+        const {error} = messageSchema.validate(data, {abortEarly: false});
         if (error) { 
-            const message = error.details.map(e => e.message).join(',');
-            console.log("POST MES Error: " + message); 
-            res.status(422).send(message);
+            const message = error.details.map(e => e.message);
+            console.log("[POST] /messagesError: " + message); 
+            res.status(422).send({error: message});
             return;
         }
     
@@ -181,17 +177,11 @@ app.delete("/messages/:id", async (req, res) => {
 app.put("/messages/:id", async (req, res) => {
     try {
         const data = req.body;
-        const schema = Joi.object({
-            to: Joi.string().alphanum().min(1).required(),
-            text: Joi.string().min(1).required(),
-            type: Joi.string().alphanum().min(1).valid("message", "private_message").required()
-        });
-    
-        const {error} = schema.validate(data);
+        const {error} = messageSchema.validate(data, {abortEarly: false});
         if (error) { 
-            const message = error.details.map(e => e.message).join(',');
-            console.log("POST MES Error: " + message); 
-            res.status(422).send(message);
+            const message = error.details.map(e => e.message);
+            console.log("[PUT] /messages Error: " + message); 
+            res.status(422).send({error: message});
             return;
         }
     
