@@ -47,7 +47,7 @@ setInterval(async () => {
     } catch (err) {
         console.log('Remoção Error: ', err.message);
     }
-}, 15000)
+}, 15000);
 
 // [GET] /participants
 app.get("/participants", async (req, res) => {
@@ -112,9 +112,14 @@ app.get("/messages", async (req, res) => {
 
         const documents = await messages
         .find({$or: [{from}, {"type": "message"}, {"to": from}, {"to": "Todos"}]})
-        .skip(messages.count() - limit)
         .toArray();
-        res.send(documents);
+
+        const len = documents.length;
+        const filtered = [];
+        for (let i = len-limit; i < len; i++) {
+            filtered.push(documents[i]);
+        }
+        res.send(filtered);
     } catch (e) {
         console.log('[GET] /messages Error: ', e.message);
         res.sendStatus(500);
