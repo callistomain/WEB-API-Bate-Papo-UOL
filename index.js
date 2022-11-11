@@ -22,13 +22,13 @@ const messages = db.collection("messages");
 
 // Schemas
 const participantSchema = Joi.object({
-    name: Joi.string().alphanum().min(1).required()
+    name: Joi.string().required()
 });
 
 const messageSchema = Joi.object({
-    to: Joi.string().alphanum().min(1).required(),
-    text: Joi.string().min(1).required(),
-    type: Joi.string().alphanum().min(1).valid("message", "private_message").required()
+    to: Joi.string().required(),
+    text: Joi.string().required(),
+    type: Joi.string().valid("message", "private_message").required()
 });
 
 // Remoção automática de usuários inativos
